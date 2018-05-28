@@ -2,119 +2,123 @@ package config
 
 import (
 	"flag"
-	"os"
-	"path"
-	"path/filepath"
-	"strconv"
 
 	"github.com/magiconair/properties"
 )
 
 var (
-	emptyString = ""
-	flagMap     = make(map[string]*flagDef)
-	loadedProps *properties.Properties
+	// ConfigFlagName sets the flat to use when passing the config file name
+	ConfigFlagName = "config"
+	// DefaultConfigFile is the default name where configuration is pulled from
+	DefaultConfigFile = "config.properties"
+	flagMap           = make(map[string]FlagDef)
+	loadedProps       *properties.Properties
 )
 
-type flagDef struct {
-	name     string
-	usage    string
-	defValue string
+// FlagDef interface
+type FlagDef interface {
+	Flag()
+	Resolve()
+}
 
-	valuePtr    *string
-	stringValue string
-	intValue    int64
-	boolValue   bool
-	floatValue  float64
+type flagDef struct {
+	name  string
+	usage string
+
+	stringDefault  string
+	stringValuePtr *string
+	stringValue    string
+
+	intValue    int
+	intValuePtr *int
+
+	int64Value    int64
+	int64ValuePtr *int64
+
+	boolValue    bool
+	boolValuePtr *bool
+
+	floatValue    float64
+	floatValuePtr *float64
 }
 
 // String defines a string flag
-func String(name, defValue, usage string) *string {
-	def := flagVar(name, defValue, usage)
-	return &def.stringValue
+func String(name, def, usage string) *string {
+	fd := &stringFlagDef{
+		name:         name,
+		usage:        usage,
+		valueDefault: def,
+	}
+	flagMap[name] = fd
+	return &fd.value
 }
 
 // Int defines an integer flag
-func Int(name string, defValue int, usage string) *int64 {
-	def := flagVar(name, strconv.Itoa(defValue), usage)
-	return &def.intValue
-}
-
-// Float defines an integer flag
-func Float(name string, defValue float64, usage string) *float64 {
-	def := flagVar(name, strconv.FormatFloat(defValue, 'f', -1, 64), usage)
-	return &def.floatValue
-}
-
-// Bool defines an integer flag
-func Bool(name string, defValue bool, usage string) *int64 {
-	def := flagVar(name, strconv.FormatBool(defValue), usage)
-	return &def.intValue
-}
-
-func flagVar(name, defValue, usage string) *flagDef {
-	props := getConfig()
-	def := &flagDef{
-		name:     name,
-		defValue: props.GetString(name, defValue),
-		usage:    usage,
+func Int(name string, def int, usage string) *int {
+	fd := &intFlagDef{
+		name:         name,
+		usage:        usage,
+		valueDefault: def,
 	}
-	flagMap[name] = def
-	return def
+	flagMap[name] = fd
+	return &fd.value
+}
+
+// Int64 defines an integer 64 flag
+func Int64(name string, def int64, usage string) *int64 {
+	fd := &int64FlagDef{
+		name:         name,
+		usage:        usage,
+		valueDefault: def,
+	}
+	flagMap[name] = fd
+	return &fd.value
+}
+
+// Float defines a float flag
+func Float(name string, def float64, usage string) *float64 {
+	fd := &floatFlagDef{
+		name:         name,
+		usage:        usage,
+		valueDefault: def,
+	}
+	flagMap[name] = fd
+	return &fd.value
+}
+
+// Bool defines a boolean flag
+func Bool(name string, def bool, usage string) *bool {
+	fd := &boolFlagDef{
+		name:         name,
+		usage:        usage,
+		valueDefault: def,
+	}
+	flagMap[name] = fd
+	return &fd.value
+}
+
+// Var custom flag parsing.  see flag.Var
+func Var(v FlagValue, name string, usage string) {
+	fd := &varFlagDef{
+		name:  name,
+		usage: usage,
+		value: v,
+	}
+	flagMap[name] = fd
 }
 
 // Parse call parse on flags
 func Parse() {
 	for _, v := range flagMap {
-		v.valuePtr = flag.String(v.name, v.defValue, v.usage)
+		v.Flag()
 	}
 	flag.Parse()
 	for _, v := range flagMap {
-		v.stringValue = *v.valuePtr
-		v.intValue, _ = strconv.ParseInt(v.stringValue, 10, 64)
-		v.floatValue, _ = strconv.ParseFloat(v.stringValue, 64)
-		v.boolValue, _ = strconv.ParseBool(v.stringValue)
+		v.Resolve()
 	}
 }
 
 // PrintHelp prints flag helps
 func PrintHelp() {
 	flag.PrintDefaults()
-}
-
-//
-type voidWriter struct {
-}
-
-func (w *voidWriter) Write(p []byte) (n int, err error) {
-	return len(p), nil
-}
-
-func getConfig() *properties.Properties {
-
-	if loadedProps != nil {
-		return loadedProps
-	}
-
-	// get it from environment
-	envFileName, ok := os.LookupEnv("CONFIG")
-	if !ok {
-		envFileName = "config.properties"
-		if _, err := os.Stat(envFileName); os.IsNotExist(err) {
-			cwd, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-			envFileName = path.Join(cwd, envFileName)
-		}
-	}
-
-	// get it from flags
-	fs := flag.NewFlagSet("config", flag.ContinueOnError)
-	fs.SetOutput(&voidWriter{})
-	configFilePtr := fs.String("config", envFileName, "Path to configuration file")
-	_ = fs.Parse(os.Args[1:])
-	p, err := properties.LoadFile(*configFilePtr, properties.UTF8)
-	if err != nil {
-		p = properties.NewProperties()
-	}
-	loadedProps = p // set global variable
-	return p
 }

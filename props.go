@@ -1,7 +1,7 @@
 package config
 
 import (
-	"flag"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,21 +16,17 @@ func getConfig() *properties.Properties {
 	}
 
 	// get it from environment
-	envFileName, ok := os.LookupEnv(_env(ConfigFlagName))
-	if !ok {
-		envFileName = DefaultConfigFile
-		if _, err := os.Stat(envFileName); os.IsNotExist(err) {
+	configFlagName := fmt.Sprintf(ConfigFlagName, AppName) // ConfigFlagName: %s_config -> APPNAME_CONFIG
+	envFileName, ok := os.LookupEnv(_env(configFlagName))
+	if !ok { // if app_config env variable not set:
+		envFileName = fmt.Sprintf(ConfigFileNameFormat, AppName) // ConfigFileNameFormat %s.properties
+		if _, err := os.Stat(envFileName); os.IsNotExist(err) {  // if not exists:
 			cwd, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-			envFileName = path.Join(cwd, envFileName)
+			envFileName = path.Join(cwd, envFileName) // $PWD/config.properties
 		}
 	}
 
-	// get it from flags
-	fs := flag.NewFlagSet(ConfigFlagName, flag.ContinueOnError)
-	fs.SetOutput(&dummyWriter{})
-	configFilePtr := fs.String(ConfigFlagName, envFileName, "Path to configuration file")
-	_ = fs.Parse(os.Args[1:])
-	p, err := properties.LoadFile(*configFilePtr, properties.UTF8)
+	p, err := properties.LoadFile(envFileName, properties.UTF8)
 	if err != nil {
 		p = properties.NewProperties()
 	}

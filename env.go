@@ -1,13 +1,16 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 )
 
 func envString(name string, def string) string {
-	if v, ok := os.LookupEnv(_env(name)); ok {
+	envName := _env(name)
+	fmt.Printf("envName:%s\n", envName)
+	if v, ok := os.LookupEnv(envName); ok {
 		return v
 	}
 	return getConfig().GetString(name, def)
@@ -46,8 +49,11 @@ func envBool(name string, def bool) bool {
 }
 
 func _env(key string) string {
-	envKey := strings.Replace(key, ".", "_", -1)
-	envKey = strings.Replace(key, "-", "_", -1)
-	envKey = strings.ToUpper(key)
+	envKey := strings.ToUpper(key)
+	for _, c := range _envRplChars {
+		envKey = strings.Replace(envKey, c, "_", -1)
+	}
 	return envKey
 }
+
+var _envRplChars = []string{".", "-", "/"}

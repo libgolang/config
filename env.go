@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -9,7 +8,6 @@ import (
 
 func envString(name string, def string) string {
 	envName := _env(name)
-	fmt.Printf("envName:%s\n", envName)
 	if v, ok := os.LookupEnv(envName); ok {
 		return v
 	}

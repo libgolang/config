@@ -1,105 +1,242 @@
 package config
 
+//
 import (
-	"flag"
-
 	"github.com/magiconair/properties"
+	flag "github.com/spf13/pflag"
+	"os"
+	"path"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
+//
 var (
-	// AppName Used to construct configuration file
-	AppName = "application"
-	// ConfigFileNameFormat default name to pull configuration from
-	ConfigFileNameFormat = "%s.properties"
-	// ConfigFlagName flag name to override DefaultConfigFile
-	ConfigFlagName = "%s_config" // APPLICATON_CONFIG
-	flagMap        = make(map[string]flagDef)
-	loadedProps    *properties.Properties
+	conf = NewConf()
 )
 
-// flagDef interface
-type flagDef interface {
-	Flag()
-	Resolve()
+// Conf config structure
+type Conf struct {
+	isInitialized bool
+	name          string
+	props         *properties.Properties
+	flagMap       map[string]flagMapType
 }
 
-// String defines a string flag
-func String(name, def, usage string) *string {
-	fd := &stringFlagDef{
-		name:         name,
-		usage:        usage,
-		valueDefault: def,
+// NewConf *Conf constructor
+func NewConf() *Conf {
+	return &Conf{
+		isInitialized: false,
+		name:          "app",
+		flagMap:       make(map[string]flagMapType),
 	}
-	flagMap[name] = fd
-	return &fd.value
 }
 
-// Int defines an integer flag
-func Int(name string, def int, usage string) *int {
-	fd := &intFlagDef{
-		name:         name,
-		usage:        usage,
-		valueDefault: def,
-	}
-	flagMap[name] = fd
-	return &fd.value
+// DefineString defines a flag
+func DefineString(name string, def string, usage string) { conf.DefineString(name, def, usage) }
+
+// DefineBool defines a bool flag
+func DefineBool(name string, def bool, usage string) { conf.DefineBool(name, def, usage) }
+
+// DefineInt defines an int flag
+func DefineInt(name string, def int, usage string) { conf.DefineInt(name, def, usage) }
+
+// SetName sets the configuration name used as
+// prefix and configruation file
+func SetName(name string) { conf.SetName(name) }
+
+// SetName sets the configuration name used as
+// prefix and configruation file
+func (c *Conf) SetName(name string) {
+	c.name = name
 }
 
-// Int64 defines an integer 64 flag
-func Int64(name string, def int64, usage string) *int64 {
-	fd := &int64FlagDef{
-		name:         name,
-		usage:        usage,
-		valueDefault: def,
-	}
-	flagMap[name] = fd
-	return &fd.value
+// GetString get configuration string
+func GetString(name string) string { return conf.GetString(name) }
+
+// GetInt get configuration int
+func GetInt(name string) int { return conf.GetInt(name) }
+
+// GetBool get configuration bool
+func GetBool(name string) bool { return conf.GetBool(name) }
+
+// GetString get configuration string
+func (c *Conf) GetString(name string) string {
+	//
+	c.init()
+	return c.findConfig(name).String()
 }
 
-// Float defines a float flag
-func Float(name string, def float64, usage string) *float64 {
-	fd := &floatFlagDef{
-		name:         name,
-		usage:        usage,
-		valueDefault: def,
-	}
-	flagMap[name] = fd
-	return &fd.value
+// GetInt get configuration int
+func (c *Conf) GetInt(name string) int {
+	c.init()
+	return c.findConfig(name).Int()
 }
 
-// Bool defines a boolean flag
-func Bool(name string, def bool, usage string) *bool {
-	fd := &boolFlagDef{
-		name:         name,
-		usage:        usage,
-		valueDefault: def,
-	}
-	flagMap[name] = fd
-	return &fd.value
+// GetBool get configuration bool
+func (c *Conf) GetBool(name string) bool {
+	c.init()
+	return c.findConfig(name).Bool()
 }
 
-// Var custom flag parsing.  see flag.Var
-func Var(v FlagValue, name string, usage string) {
-	fd := &varFlagDef{
-		name:  name,
-		usage: usage,
-		value: v,
+func (c *Conf) findConfig(name string) flagMapType {
+	ptr, found := c.flagMap[strings.ToLower(name)]
+	if !found {
+		panic("Configuration parameter \"" + name + "\" does not exist.  It must be defined first.")
 	}
-	flagMap[name] = fd
+	return ptr
 }
 
-// Parse call parse on flags
-func Parse() {
-	for _, v := range flagMap {
-		v.Flag()
+func (c *Conf) init() {
+	//
+	if c.isInitialized {
+		return
 	}
+
+	// Flags
+	configFilePtr := flag.String("config", "", "Configuration File")
 	flag.Parse()
-	for _, v := range flagMap {
-		v.Resolve()
+
+	//Env
+	if *configFilePtr == "" {
+		if configFile, found := os.LookupEnv(c.toEnvKey("config")); found {
+			*configFilePtr = configFile
+		}
 	}
+
+	//Config Name
+	if *configFilePtr == "" {
+		var cwd string
+		if dir, err := os.Getwd(); err != nil {
+			cwd = dir
+		} else {
+			cwd = "./"
+		}
+		files := []string{
+			path.Join(cwd, c.name+".properties"),
+			path.Join("${HOME}", c.name+".properties"),
+			path.Join("/etc", c.name+".properties"),
+		}
+		properties.LogPrintf = func(fmt string, args ...interface{}) {} // no logging please
+		if props, err := properties.LoadAll(files, properties.UTF8, true); err != nil {
+			c.props = properties.NewProperties()
+		} else {
+			c.props = props
+		}
+	} else {
+		c.props = properties.MustLoadAll([]string{*configFilePtr}, properties.UTF8, true)
+	}
+
+	//
+	c.isInitialized = true
 }
 
-// PrintHelp prints flag helps
-func PrintHelp() {
-	flag.PrintDefaults()
+// DefineString defines a flag on the config struct
+func (c *Conf) DefineString(name string, def string, usage string) {
+	f := &flagMapTypeString{
+		parent: c,
+		name:   name,
+		usage:  usage,
+		defVal: def,
+		isSet:  false,
+	}
+
+	c.flagMap[strings.ToLower(name)] = f
+	flag.Var(f, name, usage)
+}
+
+// DefineInt defines an int flag on the config struct
+func (c *Conf) DefineInt(name string, def int, usage string) {
+	c.DefineString(name, strconv.Itoa(def), usage)
+}
+
+// DefineBool defines a bool flag on the config struct
+func (c *Conf) DefineBool(name string, def bool, usage string) {
+	c.DefineString(name, strconv.FormatBool(def), usage)
+}
+
+func (c *Conf) toEnvKey(s string) string {
+	newStr := make([]rune, 0, len(s))
+	for i, r := range s {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			if unicode.IsLower(r) {
+				r = unicode.ToUpper(r)
+			}
+			newStr = append(newStr, r)
+		} else {
+			// do not add _ if the previous one was _
+			if i > 0 && newStr[i-1] == '_' {
+				continue
+			}
+			newStr = append(newStr, '_')
+		}
+	}
+	return strings.ToUpper(c.name) + "_" + string(newStr)
+}
+
+type flagMapType interface {
+	String() string
+	Bool() bool
+	Int() int
+}
+
+type flagMapTypeString struct {
+	parent *Conf
+	name   string
+	usage  string
+	defVal string
+	val    *string
+	isSet  bool
+}
+
+func (f *flagMapTypeString) Set(v string) error {
+	f.val = &v
+	f.isSet = true
+	return nil
+}
+
+func (f *flagMapTypeString) Type() string {
+	return "string"
+}
+
+func (f *flagMapTypeString) String() string {
+
+	// Return default value if not initialized.
+	// this is to make it compatible with pflag
+	// otherwise we get an NPE
+	if !f.parent.isInitialized {
+		return f.defVal
+	}
+
+	// Flags
+	if f.isSet {
+		return *f.val
+	}
+
+	// Env
+	envKey := f.parent.toEnvKey(f.name)
+	if val, found := os.LookupEnv(envKey); found {
+		return val
+	}
+
+	// Get value from file
+	return f.parent.props.GetString(f.name, f.defVal)
+
+}
+
+func (f *flagMapTypeString) Int() int {
+	i, err := strconv.Atoi(*f.val)
+	if err != nil {
+		return 0
+	}
+	return i
+}
+
+func (f *flagMapTypeString) Bool() bool {
+	v, err := strconv.ParseBool(*f.val)
+	if err != nil {
+		return false
+	}
+	return v
 }

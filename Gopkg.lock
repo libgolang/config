@@ -7,9 +7,15 @@
   revision = "c2353362d570a7bfa228149c62842019201cfb71"
   version = "v1.8.0"
 
+[[projects]]
+  name = "github.com/spf13/pflag"
+  packages = ["."]
+  revision = "9a97c102cda95a86cec2345a6f09f55a939babf5"
+  version = "v1.0.2"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "9e916104cd027617b2905dea44662f96994449a885787dacee579bcb8bb3f40b"
+  inputs-digest = "b7d9e2f1ce86730baddbd388d760cee1e7e9e706933f880817b2649bc34a6097"
   solver-name = "gps-cdcl"
   solver-version = 1

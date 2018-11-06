@@ -26,13 +26,13 @@ func main() {
 The code will read configuration variables like in the following order:
 
 - Command Line Argument
--- flag-1: -flag-1 value1 | -flag-1=value1 | --flag-1 value1 | --flag-1=value1
--- flag.2: -flag.2 value2 | -flag.2=value2 | --flag.2 value2 | --flag.2=value2
+	- flag-1: -flag-1 value1 | -flag-1=value1 | --flag-1 value1 | --flag-1=value1
+	- flag.2: -flag.2 value2 | -flag.2=value2 | --flag.2 value2 | --flag.2=value2
 - Environment Variable
--- flag-1: FLAG\_1=value1
--- flag.2: FLAG\_2=value2
+	- flag-1: FLAG\_1=value1
+	- flag.2: FLAG\_2=value2
 - Configuration File (my-application.properties)
--- flag-1: flag-1: value1
--- flag.2: flag.2: value2
+	- flag-1: flag-1: value1
+	- flag.2: flag.2: value2
 - Default value provided in code
 
